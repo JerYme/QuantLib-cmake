@@ -64,13 +64,19 @@ endif ()
 
 #--------------------------------------------------
 # initial settings - non-cached
+if (NOT QuantLib_ROOT_DIR)
+	set ( QuantLib_ROOT_DIR  ${PROJECT_SOURCE_DIR} )
+	
+	# resolve the path without any relative components
+	get_filename_component ( tmp ${QuantLib_ROOT_DIR} REALPATH )
+	set ( QuantLib_ROOT_DIR  ${tmp} ) 
+endif ()
 
-set ( QuantLib_ROOT_DIR  ${PROJECT_SOURCE_DIR} )
-# resolve the path without any relative components
-get_filename_component ( tmp ${QuantLib_ROOT_DIR} REALPATH )
-set ( QuantLib_ROOT_DIR  ${tmp} ) 
 
-set ( QuantLib_SRC_DIR   ${QuantLib_ROOT_DIR}/ql )
+if (NOT QuantLib_SRC_DIR)
+	set ( QuantLib_SRC_DIR   ${QuantLib_ROOT_DIR}/ql )
+endif ()
+
 set ( QuantLib_EXAMPLES_DIR   ${QuantLib_ROOT_DIR}/Examples )
 set ( QuantLib_BENCHMARK_DIR   ${QuantLib_ROOT_DIR}/test-suite )
 set ( QuantLib_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR} )
@@ -80,8 +86,28 @@ set ( QuantLib_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR} )
 
 set ( QuantLib_LIBRARIES )
 
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+if(COMPILER_SUPPORTS_CXX11)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+elseif(COMPILER_SUPPORTS_CXX0X)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+else()
+        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+endif()
+
 #--------------------------------
 # find BOOST - see http://www.cmake.org/cmake/help/cmake-2-8-docs.html#module:FindBoost
+## Boost ####################################################################
+
+set(Boost_USE_MULTITHREADED ON)
+
+if(WIN32)
+    set(Boost_USE_STATIC_LIBS ON)
+endif()
+
+set(Boost_FIND_REQUIRED TRUE)
 
 OPTION ( Boost_DEBUG "Whether to print debug info when cmake is looking for Boost" OFF )
 set ( Boost_DETAILED_FAILURE_MSG TRUE )
@@ -90,8 +116,21 @@ set ( Boost_USE_MULTITHREADED ${QuantLib_Boost_USES_MULTITHREADED} )
 set ( Boost_USE_STATIC_LIBS ${QuantLib_Boost_USES_STATIC_LIBS} )
 set ( Boost_USE_STATIC_RUNTIME ${QuantLib_Boost_USES_STATIC_RUNTIME} )
 
-find_package ( Boost COMPONENTS ${qlbc} REQUIRED )
-list ( APPEND QuantLib_INCLUDE_DIRS ${Boost_INCLUDE_DIRS} )
+# C:/Program Files (x86)/CMake 2.8/share/cmake-2.8/Modules/FindBoost.cmake
+# find_package ( Boost COMPONENTS ${qlbc} REQUIRED )
+find_package ( Boost COMPONENTS REQUIRED )
+
+if(Boost_INCLUDE_DIR)
+    include_directories(${Boost_INCLUDE_DIR})
+else()
+    message(FATAL_ERROR "Boost headers not found. You will have to specify them in your build environment or you can use -DBOOST_ROOT or -DBOOST_INCLUDE_DIR to tell cmake where your boost installation is.")
+endif()
+
+if(NOT Boost_FOUND)
+    message(FATAL_ERROR "Boost not found!")
+endif()
+
+list ( APPEND QuantLib_INCLUDE_DIRS ${Boost_INCLUDE_DIR} )
 list ( APPEND QuantLib_LIBRARIES ${Boost_LIBRARIES} )
 
 #---------------------------------------------------------
@@ -111,7 +150,8 @@ include ( files.cmake )
 macro ( create_source_group GroupPrefix RootDir ProjectSources  )
   set ( DirSources ${ProjectSources} )
   foreach ( Source ${DirSources} )
-    string ( REGEX REPLACE "${RootDir}" "" RelativePath "${Source}" )
+	string ( REPLACE "\\" "/" RootDirEscaped "${RootDir}" )
+    string ( REGEX REPLACE "${RootDirEscaped}" "" RelativePath "${Source}" )
     string ( REGEX REPLACE "[\\\\/][^\\\\/]*$" "" RelativePath "${RelativePath}" )
     string ( REGEX REPLACE "^[\\\\/]" "" RelativePath "${RelativePath}" )
     string ( REGEX REPLACE "/" "\\\\\\\\" RelativePath "${RelativePath}" )
